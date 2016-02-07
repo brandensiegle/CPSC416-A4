@@ -17,6 +17,31 @@ import (
 	//"strings"
 )
 
+// Map implementing the key-value store.
+var kvmap map[string]*MapVal
+
+// Mutex for accessing kvmap from different goroutines safely.
+var mapMutex *sync.Mutex
+
+// Reserved value in the service that is used to indicate that the key
+// is unavailable: used in return values to clients and internally.
+const unavail string = "unavailable"
+
+// Lookup a key, and if it's used for the first time, then initialize its value.
+func lookupKey(key string) *MapVal {
+	// lookup key in store
+	val := kvmap[key]
+	if val == nil {
+		// key used for the first time: create and initialize a MapVal
+		// instance to associate with a key
+		val = &MapVal{
+			value: "",
+		}
+		kvmap[key] = val
+	}
+	return val
+}
+
 func main(){
 	// Parse args.
 	usage := fmt.Sprintf("Usage: %s [local ip] [front-end ip:port] [id]\n",
