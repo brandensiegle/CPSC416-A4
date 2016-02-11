@@ -21,6 +21,7 @@ import (
 	"net/rpc"
 	"os"
 	"strings"
+	"sync"
 )
 
 // args in get(args)
@@ -46,7 +47,47 @@ type ValReply struct {
 	Val string // value; depends on the call
 }
 
+type kvNodeItem struct {
+	kvNodeConn net.Conn
+	nodeID string
+	nextKVNode *kvNodeItem
+}
+
+var firstNode	*kvNodeItem
+var lastNode	*kvNodeItem
+
+
 type KeyValService int
+
+var addKVConnMutex *sync.Mutex
+
+//structure for commands sent to kv-nodes
+type FrontEndCommand struct {
+	Command string
+	Key string
+	Value string
+	TestVal string
+}
+
+//structure for replies from kv-node
+type FrontEndReply struct {
+	Message string
+}
+
+func getFromKVNodes(key string) string{
+
+	return "STRING"
+}
+
+func putToKVNodes(key string, value string) string{
+
+	return ""
+}
+
+func testSetKVNodes(key string, value string, testValue string) string {
+
+	return "STRING"
+}
 
 // GET
 func (kvs *KeyValService) Get(args *GetArgs, reply *ValReply) error {
@@ -116,20 +157,94 @@ func main() {
 	}
 
 	clientsIpPort := os.Args[1]
-	// kvnodesIpPort := os.Args[2]
-	// replicationFactor := os.Args[2]
+	kvnodesIpPort := os.Args[2]
+	// replicationFactor := strconv.Atoi(os.Args[2])
 
 	// TODO: do here the stuff other
+	firstNode = nil
+	lastNode = nil
 
-	// Setup key-value store and register service.
-	kvservice := new(KeyValService)
-	rpc.Register(kvservice)
-	l, e := net.Listen("tcp", clientsIpPort)
+
+	kvNodeListen, e := net.Listen("tcp", kvnodesIpPort)
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
-	for {
-		conn, _ := l.Accept()
-		go rpc.ServeConn(conn)
+
+	clientService := new(KeyValService)
+	rpc.Register(clientService)
+	clientListen, e := net.Listen("tcp", clientsIpPort)
+	if e != nil {
+		log.Fatal("listen error:", e)
 	}
+	
+
+	//accept the clients
+	go func() {
+		println("Waiting For Clients")
+		for{
+			clientConn, _ := clientListen.Accept()
+			go rpc.ServeConn(clientConn)
+			print("Client Connection Accepted")
+		}
+	}()
+
+	//accept the kv nodes
+	for {
+		println("Waiting For KVNodes")
+		kvConn, err := kvNodeListen.Accept()
+		if err != nil {
+			fmt.Println("Error on 183: ", err)
+			os.Exit(-1)
+		}
+		go handleNewKVNode(kvConn)
+		print("KVNode Connection Accepted")
+	}
+
+	
+}
+
+func handleNewKVNode(kvConn net.Conn) {
+	//setup Connection between FE and KVNode
+	//create new list item
+	addKVConnMutex.Lock()
+
+	var newNode *kvNodeItem
+	
+	if (lastNode == nil) {
+		newNode = &kvNodeItem{
+			kvNodeConn: kvConn,
+			nodeID: "",
+			nextKVNode: nil,
+		}
+
+		firstNode = newNode
+		lastNode = newNode
+	} else {
+		newNode = &kvNodeItem{
+			kvNodeConn: kvConn,
+			nodeID: "",
+			nextKVNode: firstNode,
+		}
+
+		firstNode = newNode
+	}
+	addKVConnMutex.Unlock()
+
+
+	_, serr := newNode.kvNodeConn.Write([]byte("Success"))
+	if serr != nil {
+		fmt.Println("Error on send: ", serr)
+		os.Exit(-1)
+	}
+
+	var buf [1024]byte
+	num, err := kvConn.Read(buf[:])
+	if err != nil {
+		fmt.Println("Error on read: ", err)
+		os.Exit(-1)
+	}
+
+	newNode.nodeID = string(buf[0:num])
+
+	return
 }
