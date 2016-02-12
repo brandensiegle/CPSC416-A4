@@ -1,7 +1,4 @@
-// Version 1.0
-//
-// Starter code for key-value front-end that supports three API calls
-// over rpc:
+// Code for key-value front-end that supports three API calls over rpc:
 // - get(key)
 // - put(key,val)
 // - testset(key,testval,newval)
@@ -20,6 +17,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -49,13 +47,12 @@ type ValReply struct {
 
 type kvNodeItem struct {
 	kvNodeConn net.Conn
-	nodeID string
+	nodeID     string
 	nextKVNode *kvNodeItem
 }
 
-var firstNode	*kvNodeItem
-var lastNode	*kvNodeItem
-
+var firstNode *kvNodeItem
+var lastNode *kvNodeItem
 
 type KeyValService int
 
@@ -64,8 +61,8 @@ var addKVConnMutex *sync.Mutex
 //structure for commands sent to kv-nodes
 type FrontEndCommand struct {
 	Command string
-	Key string
-	Value string
+	Key     string
+	Value   string
 	TestVal string
 }
 
@@ -74,13 +71,25 @@ type FrontEndReply struct {
 	Message string
 }
 
-func getFromKVNodes(key string) string{
+var replicationFactor int
+var numNodes int // number of nodes in system
+
+func getFromKVNodes(key string) string {
 
 	return "STRING"
 }
 
-func putToKVNodes(key string, value string) string{
-
+func putToKVNodes(key string, value string) string {
+	// put in replicationFactor nodes
+	node := firstNode
+	for i := 0; i < replicationFactor; i++ {
+		err := node.kvNodeConn // TODO, make RPC call to KV node
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		node = node.nextKVNode
+	}
 	return ""
 }
 
@@ -135,7 +144,8 @@ func (kvs *KeyValService) Get(args *GetArgs, reply *ValReply) error {
 // PUT
 func (kvs *KeyValService) Put(args *PutArgs, reply *ValReply) error {
 	// TODO: do the other stuff here.
-	reply.Val = "DRAGONS"
+	putToKVNodes(args.Key, args.Val)
+	reply.Val = "DRAGONS~"
 	return nil
 }
 
@@ -158,12 +168,14 @@ func main() {
 
 	clientsIpPort := os.Args[1]
 	kvnodesIpPort := os.Args[2]
-	// replicationFactor := strconv.Atoi(os.Args[2])
+	replicationFactor, e := strconv.Atoi(os.Args[3])
+	if e != nil {
+		fmt.Println(e)
+		os.Exit(1)
+	}
 
-	// TODO: do here the stuff other
 	firstNode = nil
 	lastNode = nil
-
 
 	kvNodeListen, e := net.Listen("tcp", kvnodesIpPort)
 	if e != nil {
@@ -176,12 +188,11 @@ func main() {
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
-	
 
 	//accept the clients
 	go func() {
 		println("Waiting For Clients")
-		for{
+		for {
 			clientConn, _ := clientListen.Accept()
 			go rpc.ServeConn(clientConn)
 			print("Client Connection Accepted")
@@ -200,7 +211,6 @@ func main() {
 		print("KVNode Connection Accepted")
 	}
 
-	
 }
 
 func handleNewKVNode(kvConn net.Conn) {
@@ -209,11 +219,11 @@ func handleNewKVNode(kvConn net.Conn) {
 	addKVConnMutex.Lock()
 
 	var newNode *kvNodeItem
-	
-	if (lastNode == nil) {
+
+	if lastNode == nil {
 		newNode = &kvNodeItem{
 			kvNodeConn: kvConn,
-			nodeID: "",
+			nodeID:     "",
 			nextKVNode: nil,
 		}
 
@@ -222,14 +232,13 @@ func handleNewKVNode(kvConn net.Conn) {
 	} else {
 		newNode = &kvNodeItem{
 			kvNodeConn: kvConn,
-			nodeID: "",
+			nodeID:     "",
 			nextKVNode: firstNode,
 		}
 
 		firstNode = newNode
 	}
 	addKVConnMutex.Unlock()
-
 
 	_, serr := newNode.kvNodeConn.Write([]byte("Success"))
 	if serr != nil {
@@ -245,6 +254,7 @@ func handleNewKVNode(kvConn net.Conn) {
 	}
 
 	newNode.nodeID = string(buf[0:num])
+	numNodes++
 
 	return
 }

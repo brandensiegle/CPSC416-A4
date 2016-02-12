@@ -10,7 +10,7 @@ package main
 
 import (
 	"fmt"
-	//"log" 
+	//"log"
 	"net"
 	//"net/rpc"
 	"os"
@@ -39,8 +39,8 @@ const unavail string = "unavailable"
 
 type FrontEndCommand struct {
 	Command string
-	Key string
-	Value string
+	Key     string
+	Value   string
 	TestVal string
 }
 
@@ -63,7 +63,16 @@ func lookupKey(key string) *MapVal {
 	return val
 }
 
-func main(){
+func putToKVN(key string, value string) error {
+	mapMutex.Lock()
+	defer mapMutex.Unlock()
+
+	val := lookupKey(key)
+	val.value = value
+	return nil
+}
+
+func main() {
 	// Parse args.
 	usage := fmt.Sprintf("Usage: %s [local ip] [front-end ip:port] [id]\n",
 		os.Args[0])
@@ -90,7 +99,7 @@ func main(){
 		os.Exit(-1)
 	}
 
-	if (string(buf[0:num]) == "Success") {
+	if string(buf[0:num]) == "Success" {
 		println(string(buf[0:num]))
 	}
 
