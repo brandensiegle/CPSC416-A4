@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"errors"
 )
 
 // args in get(args)
@@ -82,7 +83,15 @@ func getFromKVNodes(key string) string {
 func putToKVNodes(key string, value string) string {
 	// put in replicationFactor nodes
 	node := firstNode
-	for i := 0; i < replicationFactor; i++ {
+	var rep int
+
+	if numNodes < replicationFactor {
+		rep = numNodes
+	} else {
+		rep = replicationFactor
+	}
+
+	for i := 0; i < rep; i++ {
 		err := node.kvNodeConn // TODO, make RPC call to KV node
 		if err != nil {
 			fmt.Println(err)
@@ -93,8 +102,20 @@ func putToKVNodes(key string, value string) string {
 	return ""
 }
 
-func testSetKVNodes(key string, value string, testValue string) string {
+func testSetKVNodes(key string, value string, testVal string) string {
+	node := firstNode
+	
+	testArgs := FrontEndCommand {
+		Command: "testset",
+		Key:	key,
+		Value: value,
+		TestVal: testVal}
 
+	for (node != lastNode || node == lastNode) {
+		// call kvnTestSet in kv-node with testArgs
+		fmt.Println(testArgs)
+		node = node.nextKVNode
+	}
 	return "STRING"
 }
 
@@ -151,7 +172,8 @@ func (kvs *KeyValService) Put(args *PutArgs, reply *ValReply) error {
 
 // TESTSET
 func (kvs *KeyValService) TestSet(args *TestSetArgs, reply *ValReply) error {
-	// TODO: do here the other stuff
+	testSetKVNodes(args.Key, args.NewVal, args.TestVal)
+	
 	reply.Val = "DRAGONS"
 	return nil
 }
@@ -168,7 +190,7 @@ func main() {
 
 	clientsIpPort := os.Args[1]
 	kvnodesIpPort := os.Args[2]
-	replicationFactor, e := strconv.Atoi(os.Args[3])
+	replicationFactor, e = strconv.Atoi(os.Args[3])
 	if e != nil {
 		fmt.Println(e)
 		os.Exit(1)

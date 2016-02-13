@@ -48,6 +48,12 @@ type FrontEndReply struct {
 	Message string
 }
 
+type TestSetArgs struct {
+	Key     string // key to test
+	TestVal string // value to test against actual value
+	NewVal  string // value to use if testval equals to actual value
+}
+
 // Lookup a key, and if it's used for the first time, then initialize its value.
 func lookupKey(key string) *MapVal {
 	// lookup key in store
@@ -69,6 +75,23 @@ func putToKVN(key string, value string) error {
 
 	val := lookupKey(key)
 	val.value = value
+	return nil
+}
+
+func kvnTestSet(args *TestSetArgs) error {
+	// Acquire mutex for exclusive access to kvmap.
+	mapMutex.Lock()
+	// Defer mutex unlock to (any) function exit.
+	defer mapMutex.Unlock()
+
+	val := lookupKey(args.Key)
+
+	// Execute the testset.
+	if val.value == args.TestVal {
+		val.value = args.NewVal
+	}
+
+	// reply.Val = val.value
 	return nil
 }
 
