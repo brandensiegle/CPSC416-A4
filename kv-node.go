@@ -10,9 +10,9 @@ package main
 
 import (
 	"fmt"
-	//"log"
+	"log"
 	"net"
-	//"net/rpc"
+	"net/rpc"
 	"os"
 	//"strings"
 	"sync"
@@ -37,22 +37,40 @@ var myID string
 // is unavailable: used in return values to clients and internally.
 const unavail string = "unavailable"
 
-type FrontEndCommand struct {
-	Command string
-	Key     string
-	Value   string
-	TestVal string
-}
 
-type FrontEndReply struct {
-	Message string
-}
 
 type TestSetArgs struct {
 	Key     string // key to test
 	TestVal string // value to test against actual value
 	NewVal  string // value to use if testval equals to actual value
 }
+
+// args in get(args)
+type GetArgs struct {
+	Key string // key to look up
+}
+
+// args in put(args)
+type PutArgs struct {
+	Key string // key to associate value with
+	Val string // value
+}
+
+//reply
+type kvnReply struct {
+	Val string
+}
+
+type MapMessage struct {
+	Map map[string]*MapVal
+}
+
+type mapReply struct {
+	Map map[string]*MapVal
+}
+
+//rpc service
+type KeyValNode int
 
 // Lookup a key, and if it's used for the first time, then initialize its value.
 func lookupKey(key string) *MapVal {
@@ -69,16 +87,33 @@ func lookupKey(key string) *MapVal {
 	return val
 }
 
-func putToKVN(key string, value string) error {
-	mapMutex.Lock()
-	defer mapMutex.Unlock()
+func (kvn *KeyValNode) getNodeID(arg string, reply *kvnReply) error {
+	reply.Val = myID
 
-	val := lookupKey(key)
-	val.value = value
 	return nil
 }
 
-func kvnTestSet(args *TestSetArgs) error {
+func (kvn *KeyValNode) getFromKVN(getArgs *GetArgs, reply *kvnReply) error {
+	mapMutex.Lock()
+	defer mapMutex.Unlock()
+
+	val := lookupKey(getArgs.Key)
+	reply.Val = val.value
+
+
+	return nil
+}
+
+func (kvn *KeyValNode) putToKVN(putArgs *PutArgs, reply *kvnReply) error {
+	mapMutex.Lock()
+	defer mapMutex.Unlock()
+
+	val := lookupKey(putArgs.Key)
+	val.value = putArgs.Val
+	return nil
+}
+
+func (kvn *KeyValNode) kvnTestSet(args *TestSetArgs, reply *kvnReply) error {
 	// Acquire mutex for exclusive access to kvmap.
 	mapMutex.Lock()
 	// Defer mutex unlock to (any) function exit.
@@ -95,6 +130,40 @@ func kvnTestSet(args *TestSetArgs) error {
 	return nil
 }
 
+func (kvn *KeyValNode) getMap(arg, string, reply *mapReply) error {
+	// Acquire mutex for exclusive access to kvmap.
+	mapMutex.Lock()
+	// Defer mutex unlock to (any) function exit.
+	defer mapMutex.Unlock()
+
+	reply.Map = kvmap
+
+	return nil
+}
+
+func (kvn *KeyValNode) putMap(newMap *MapMessage, reply *kvnReply) error {
+	// Acquire mutex for exclusive access to kvmap.
+	mapMutex.Lock()
+	// Defer mutex unlock to (any) function exit.
+	defer mapMutex.Unlock()
+
+	kvmap = newMap.Map
+
+	reply.Val = "Success"
+
+	return nil
+}
+
+func (kvn *KeyValNode) killNode(arg string, reply *kvnReply) error {
+
+	os.Exit(-1)
+
+	return nil
+}
+
+
+
+
 func main() {
 	// Parse args.
 	usage := fmt.Sprintf("Usage: %s [local ip] [front-end ip:port] [id]\n",
@@ -108,6 +177,10 @@ func main() {
 	frontEndAdress = os.Args[2]
 	myID = os.Args[3]
 
+
+	keyValNode := new(KeyValNode)
+	rpc.Register(keyValNode)
+
 	//connect to front end
 	conn, err := net.Dial("tcp", frontEndAdress)
 	if err != nil {
@@ -115,30 +188,16 @@ func main() {
 		os.Exit(-1)
 	}
 
-	var buf [1024]byte
-	num, err := conn.Read(buf[:])
-	if err != nil {
-		fmt.Println("Error on read: ", err)
-		os.Exit(-1)
+	conn.Close()
+
+	l, e := net.Listen("tcp", myAddress)
+	if e != nil {
+		log.Fatal("listen error:", e)
 	}
 
-	if string(buf[0:num]) == "Success" {
-		println(string(buf[0:num]))
+	for{
+		conn, _ := l.Accept()
+		go rpc.ServeConn(conn)
 	}
-
-	_, werr := conn.Write([]byte(myID))
-	if werr != nil {
-		fmt.Println("Error on write: ", werr)
-		os.Exit(-1)
-	}
-
-	//for{
-	//wait for command
-
-	//parse and execute command
-
-	//return to front end
-
-	//}
 
 }
