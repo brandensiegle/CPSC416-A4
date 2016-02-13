@@ -37,8 +37,6 @@ var myID string
 // is unavailable: used in return values to clients and internally.
 const unavail string = "unavailable"
 
-
-
 type TestSetArgs struct {
 	Key     string // key to test
 	TestVal string // value to test against actual value
@@ -87,7 +85,7 @@ func lookupKey(key string) *MapVal {
 	return val
 }
 
-type Empty struct{
+type Empty struct {
 	Val string
 }
 
@@ -103,7 +101,6 @@ func (kvn *KeyValNode) getFromKVN(getArgs *GetArgs, reply *kvnReply) error {
 
 	val := lookupKey(getArgs.Key)
 	reply.Val = val.value
-
 
 	return nil
 }
@@ -165,9 +162,6 @@ func (kvn *KeyValNode) killNode(arg *Empty, reply *kvnReply) error {
 	return nil
 }
 
-
-
-
 func main() {
 	// Parse args.
 	usage := fmt.Sprintf("Usage: %s [local ip] [front-end ip:port] [id]\n",
@@ -180,7 +174,6 @@ func main() {
 	myAddress = os.Args[1]
 	frontEndAdress = os.Args[2]
 	myID = os.Args[3]
-
 
 	keyValNode := new(KeyValNode)
 	rpc.Register(keyValNode)
@@ -199,7 +192,7 @@ func main() {
 		log.Fatal("listen error:", e)
 	}
 
-	for{
+	for {
 		kvconn, _ := l.Accept()
 		go rpc.ServeConn(kvconn)
 	}
