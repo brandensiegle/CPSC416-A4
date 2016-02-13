@@ -22,6 +22,10 @@ import (
 	"sync"
 )
 
+type MapVal struct {
+	value string // the underlying value representation
+}
+
 // args in get(args)
 type GetArgs struct {
 	Key string // key to look up
@@ -54,9 +58,17 @@ type Empty struct {
 }
 
 type kvNodeItem struct {
-	kvNodeConn *rpc.Client
+	kvNodeConn rpc.Client
 	nodeID     string
 	nextKVNode *kvNodeItem
+}
+
+type MapMessage struct {
+	Map map[string]*MapVal
+}
+
+type mapReply struct {
+	Map map[string]*MapVal
 }
 
 type KeyValService int
@@ -88,7 +100,7 @@ func putToKVNodes(key string, value string) string {
 	}
 
 	for i := 0; i < rep; i++ {
-		err := node.kvNodeConn // TODO, make RPC call to KV node
+		err := node.kvNodeConn.Call("",1,1) // TODO, make RPC call to KV node
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -111,6 +123,10 @@ func testSetKVNodes(key string, value string, testVal string) string {
 // GET
 func (kvs *KeyValService) Get(args *GetArgs, reply *ValReply) error {
 	// Check if the issued get command is a CMD operation.
+
+	//var kvnVal kvnReply
+	//var dur Empty
+
 	if args.Key[0:3] == "CMD" {
 		// Split by spaces.
 		tokens := strings.Fields(args.Key)
@@ -120,8 +136,15 @@ func (kvs *KeyValService) Get(args *GetArgs, reply *ValReply) error {
 				key := tokens[2]
 				fmt.Println("get(CMD " + tokens[1] + " " + key + ")")
 
+				
 				// TODO
-				reply.Val = "" // No replicas for this key in the system.
+				//stringOfNodes := ""
+				//node := firstNode
+				//stringOfNodes = firstNode.nodeID
+				//node = firstNode.nextKVNode
+				
+
+				//reply.Val = stringOfNodes // No replicas for this key in the system.
 				return nil
 			} else if tokens[1] == "kill-replica" {
 				// get("CMD kill-replica id")
@@ -129,6 +152,10 @@ func (kvs *KeyValService) Get(args *GetArgs, reply *ValReply) error {
 				fmt.Println("get(CMD " + tokens[1] + " " + replicaId + ")")
 
 				// TODO
+
+				//err := lastNode.kvNodeConn.Call("KeyValNode.getNodeID", dur, &kvnVal)
+				//checkError(err)
+
 				reply.Val = "false" // No replicas, so can't kill a replica.
 				return nil
 			}
@@ -170,6 +197,28 @@ func (kvs *KeyValService) TestSet(args *TestSetArgs, reply *ValReply) error {
 func replicateNodes() {
 	// replicate keys/values when node dies
 	// onto next node
+
+	var mapResponse mapReply
+	mapSend := MapMessage{
+		Map: nil,
+	}
+	var empty Empty
+	var kvr kvnReply
+
+	node := firstNode
+
+	for i := 0; i < replicationFactor; i++ {
+		if i==0 {
+			node.kvNodeConn.Call("keyValNode.getMap", empty, &mapResponse)
+			mapSend.Map = mapResponse.Map
+			node = node.nextKVNode
+		} else if  i == (replicationFactor-1) {
+			node.kvNodeConn.Call("keyValNode.putMap", mapSend, &kvr)
+		} else {
+			node = node.nextKVNode
+		}
+	}
+
 }
 
 // Main server loop.
@@ -225,12 +274,22 @@ func main() {
 			os.Exit(-1)
 		}
 
+		
 		// address of kv node
-		nodeAddr := kvConn.RemoteAddr().String()
+		//nodeAddr := kvConn.RemoteAddr().String()
+		
+		var cmd []byte
+    	fmt.Fscan(kvConn, &cmd)
 
-		kvNode, err := rpc.Dial("tcp", nodeAddr)
+    	//fmt.Println("Message:", string(cmd))
+
+    	println(string(cmd))
+
+		kvNode, err := rpc.Dial("tcp", string(cmd))
 		checkError(err)
 		kvNodeStore = kvNode
+
+
 
 		go handleNewKVNode(kvNodeStore)
 		print("KVNode Connection Accepted")
@@ -249,14 +308,17 @@ func handleNewKVNode(kvNodeStore *rpc.Client) {
 	//setup Connection between FE and KVNode
 	//create new list item
 	addKVConnMutex.Lock()
+		
 
 	var newNode *kvNodeItem
 	var kvnVal kvnReply
-	var dur Empty
+	dur := Empty{
+		Val: " ",
+	}
 
 	if lastNode == nil {
 		newNode = &kvNodeItem{
-			kvNodeConn: kvNodeStore,
+			kvNodeConn: *kvNodeStore,
 			nodeID:     "",
 			nextKVNode: nil,
 		}
@@ -265,7 +327,7 @@ func handleNewKVNode(kvNodeStore *rpc.Client) {
 		lastNode = newNode
 	} else {
 		newNode = &kvNodeItem{
-			kvNodeConn: kvNodeStore,
+			kvNodeConn: *kvNodeStore,
 			nodeID:     "",
 			nextKVNode: nil,
 		}
@@ -275,7 +337,7 @@ func handleNewKVNode(kvNodeStore *rpc.Client) {
 	}
 	addKVConnMutex.Unlock()
 
-	err := lastNode.kvNodeConn.Call("KeyValNode.getNodeID", dur, &kvnVal)
+	err := lastNode.kvNodeConn.Call("keyValNode.getNodeID", dur, &kvnVal)
 	checkError(err)
 
 	newNode.nodeID = kvnVal.Val

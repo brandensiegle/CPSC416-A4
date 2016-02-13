@@ -185,7 +185,10 @@ func main() {
 		os.Exit(-1)
 	}
 
+	fmt.Fprintf(conn, myAddress)
+
 	conn.Close()
+
 
 	l, e := net.Listen("tcp", myAddress)
 	if e != nil {
