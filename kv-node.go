@@ -87,7 +87,11 @@ func lookupKey(key string) *MapVal {
 	return val
 }
 
-func (kvn *KeyValNode) getNodeID(arg string, reply *kvnReply) error {
+type Empty struct{
+	Val string
+}
+
+func (kvn *KeyValNode) getNodeID(arg *Empty, reply *kvnReply) error {
 	reply.Val = myID
 
 	return nil
@@ -130,7 +134,7 @@ func (kvn *KeyValNode) kvnTestSet(args *TestSetArgs, reply *kvnReply) error {
 	return nil
 }
 
-func (kvn *KeyValNode) getMap(arg, string, reply *mapReply) error {
+func (kvn *KeyValNode) getMap(arg *Empty, reply *mapReply) error {
 	// Acquire mutex for exclusive access to kvmap.
 	mapMutex.Lock()
 	// Defer mutex unlock to (any) function exit.
@@ -154,7 +158,7 @@ func (kvn *KeyValNode) putMap(newMap *MapMessage, reply *kvnReply) error {
 	return nil
 }
 
-func (kvn *KeyValNode) killNode(arg string, reply *kvnReply) error {
+func (kvn *KeyValNode) killNode(arg *Empty, reply *kvnReply) error {
 
 	os.Exit(-1)
 
@@ -196,8 +200,8 @@ func main() {
 	}
 
 	for{
-		conn, _ := l.Accept()
-		go rpc.ServeConn(conn)
+		kvconn, _ := l.Accept()
+		go rpc.ServeConn(kvconn)
 	}
 
 }
